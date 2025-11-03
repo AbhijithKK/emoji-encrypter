@@ -3,30 +3,41 @@ import React, { useState, useEffect } from "react";
 
 const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 const emojiAlphabet = [
-  "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊",
-  "😋","😎","😍","😘","😗","😙","😚","🙂","🤗","🤩",
-  "🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮",
-  "🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤",
-  "😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖",
-  "😞","😤","😢","😭","😦","😧","😨","😩","🤯","😬",
-  "😰","😱","🥵","🥶","😳","🤪","😵","🥳","💫"
-];
+    "😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊",
+    "😋","😎","😍","😘","😗","😙","😚","🙂","🤗","🤩",
+    "🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮",
+    "🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤",
+    "😒","😓","😔","😕","🙃","🤑","😲","😖","😞","😤",
+    "😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱",
+    "🥵","🥶","😳","🤪","😵","🥳","💫","😇","😈"
+  ];
+  
 
 function utf8ToBase64(str: string) {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(str);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
-
-function base64ToUtf8(b64: string) {
-  const binary = atob(b64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const decoder = new TextDecoder();
-  return decoder.decode(bytes);
-}
+    try {
+      const bytes = new TextEncoder().encode(str);
+      let binary = "";
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary);
+    } catch {
+      return window.btoa(unescape(encodeURIComponent(str)));
+    }
+  }
+  
+  function base64ToUtf8(b64: string) {
+    try {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return decodeURIComponent(escape(window.atob(b64)));
+    }
+  }
+  
+  
 
 export default function EmojiCipher() {
   const [input, setInput] = useState("");
@@ -40,72 +51,74 @@ export default function EmojiCipher() {
   const [showUserModal, setShowUserModal] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  // Helper functions for session storage
+  function savePasswordToSession(user: string|null, password: string) {
+      if (typeof window !== "undefined") {
+          sessionStorage.setItem(`emojiCipherPassword_${user}`, password);
+        }
+    }
+    
+    function getPasswordFromSession(user: string|null): string {
+        if (typeof window !== "undefined") {
+            return sessionStorage.getItem(`emojiCipherPassword_${user}`) || "";
+        }
+        return "";
+    }
+    
+    useEffect(() => {
+    const saved = getPasswordFromSession(user);
+    if (saved) setPassword(saved);
+  }, [user]);
   // Load user from localStorage on component mount
   useEffect(() => {
     const savedUser = localStorage.getItem("secretMessagesUser");
     if (savedUser === "Abhii" || savedUser === "Ashuu") {
-      setUser(savedUser);
-      setShowUserModal(false);
+        setUser(savedUser);
+        setShowUserModal(false);
     }
-  }, []);
+}, []);
 
-  function encrypt(text: string) {
+
+function encrypt(text: string) {
     try {
       setError(null);
       const b64 = utf8ToBase64(text);
-      return b64
-        .split("")
-        .map(ch => {
-          const idx = base64Alphabet.indexOf(ch);
-          return idx >= 0 ? emojiAlphabet[idx] : "";
-        })
-        .join("");
+  
+      let emojiText = "";
+      for (const ch of b64) {
+        const idx = base64Alphabet.indexOf(ch);
+        emojiText += idx >= 0 ? emojiAlphabet[idx] : "";
+      }
+  
+      return emojiText;
     } catch (e: any) {
       setError(e.message);
       return "";
     }
   }
-  // Helper functions for session storage
-function savePasswordToSession(user: string|null, password: string) {
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(`emojiCipherPassword_${user}`, password);
-    }
-  }
-  
-  function getPasswordFromSession(user: string|null): string {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem(`emojiCipherPassword_${user}`) || "";
-    }
-    return "";
-  }
-  
-  useEffect(() => {
-    const saved = getPasswordFromSession(user);
-    if (saved) setPassword(saved);
-  }, [user]);
   
   function decrypt(emojiText: string) {
     try {
       setError(null);
   
-      // Password verification
       const correctPassword = user === "Abhii" ? "Ashuu my love" : "Abhii my love";
       if (password !== correctPassword) {
         setError("Incorrect password! 💔 Please enter the correct password to decode the message.");
         return "";
       }
-      savePasswordToSession(user, password);
-
-      // Split emojis correctly (including multi-codepoint ones)
-      const emojiArray = Array.from(emojiText); // <— fixes surrogate pairs & variation selectors
-      const b64 = emojiArray
-        .map(em => {
-          const idx = emojiAlphabet.indexOf(em);
-          return idx >= 0 ? base64Alphabet[idx] : "";
-        })
-        .join("");
   
-      if (!b64) throw new Error("Invalid emoji input or corrupted message 💔");
+      savePasswordToSession(user, password);
+  
+      const emojis = Array.from(emojiText);
+      let b64 = "";
+      for (const em of emojis) {
+        const idx = emojiAlphabet.indexOf(em);
+        b64 += idx >= 0 ? base64Alphabet[idx] : "";
+      }
+  
+      if (!b64 || b64.length % 4 !== 0) {
+        throw new Error("Invalid emoji sequence or corrupted data 💔");
+      }
   
       return base64ToUtf8(b64);
     } catch (e: any) {
@@ -113,6 +126,7 @@ function savePasswordToSession(user: string|null, password: string) {
       return "";
     }
   }
+  
   
 
   function handleRun() {
