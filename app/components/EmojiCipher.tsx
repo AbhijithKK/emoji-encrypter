@@ -9,33 +9,28 @@ const emojiAlphabet = [
     "🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤",
     "😒","😓","😔","😕","🙃","🤑","😲","😖","😞","😤",
     "😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱",
-    "🥵","🥶","😳","🤪","😵","🥳","💫","😇","😈"
+    "🥵","🥶","😳","🤪","😵","🥳","💫","😇","=" // 👈 includes "=" as padding
   ];
   
+  
 
-function utf8ToBase64(str: string) {
-    try {
-      const bytes = new TextEncoder().encode(str);
-      let binary = "";
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return btoa(binary);
-    } catch {
-      return window.btoa(unescape(encodeURIComponent(str)));
-    }
+  function utf8ToBase64(str: string) {
+    const utf8Bytes = new TextEncoder().encode(str);
+    let binary = "";
+    utf8Bytes.forEach(b => (binary += String.fromCharCode(b)));
+    return btoa(binary);
   }
   
   function base64ToUtf8(b64: string) {
     try {
       const binary = atob(b64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
       return new TextDecoder().decode(bytes);
-    } catch {
-      return decodeURIComponent(escape(window.atob(b64)));
+    } catch (err) {
+      throw new Error("Invalid encoded data — message might be corrupted 💔");
     }
   }
+  
   
   
 
@@ -84,10 +79,12 @@ function encrypt(text: string) {
       setError(null);
       const b64 = utf8ToBase64(text);
   
+      // Encode Base64 → Emoji
       let emojiText = "";
       for (const ch of b64) {
         const idx = base64Alphabet.indexOf(ch);
-        emojiText += idx >= 0 ? emojiAlphabet[idx] : "";
+        if (idx === -1) continue;
+        emojiText += emojiAlphabet[idx];
       }
   
       return emojiText;
@@ -103,29 +100,32 @@ function encrypt(text: string) {
   
       const correctPassword = user === "Abhii" ? "Ashuu my love" : "Abhii my love";
       if (password !== correctPassword) {
-        setError("Incorrect password! 💔 Please enter the correct password to decode the message.");
+        setError("Incorrect password 💔 Please enter the correct password to decode.");
         return "";
       }
   
       savePasswordToSession(user, password);
   
-      const emojis = Array.from(emojiText);
+      // Convert emojis → Base64 string
       let b64 = "";
+      const emojis = Array.from(emojiText);
       for (const em of emojis) {
         const idx = emojiAlphabet.indexOf(em);
-        b64 += idx >= 0 ? base64Alphabet[idx] : "";
+        if (idx >= 0) b64 += base64Alphabet[idx];
       }
   
-      if (!b64 || b64.length % 4 !== 0) {
-        throw new Error("Invalid emoji sequence or corrupted data 💔");
+      // Fix padding (Base64 must be multiple of 4)
+      while (b64.length % 4 !== 0) {
+        b64 += "=";
       }
-  
+      b64 = b64.replace(/[^A-Za-z0-9+/=]/g, ""); // remove any stray chars
       return base64ToUtf8(b64);
     } catch (e: any) {
       setError(e.message);
       return "";
     }
   }
+  
   
   
 
